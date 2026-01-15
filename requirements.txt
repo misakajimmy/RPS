@@ -1,0 +1,37 @@
+# 剪刀石头布游戏项目依赖
+# Rock Paper Scissors Game Project Dependencies
+
+# 基础依赖
+# Basic Dependencies
+
+# 图像处理
+# Image Processing
+opencv-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# 机器学习/深度学习（用于手势识别）
+# Machine Learning / Deep Learning (for gesture recognition)
+mediapipe>=0.10.0  # Google的手势识别库
+
+# 串口通信（用于机械臂和语音模块）
+# Serial Communication (for robot arm and voice module)
+# pyserial>=3.5
+
+# 日志
+# Logging
+# loguru>=0.7.0  # 或使用标准库logging
+
+# 配置管理
+# Configuration Management
+pyyaml>=6.0
+
+# 测试框架
+# Testing Framework
+# pytest>=7.4.0
+# pytest-cov>=4.1.0
+
+# 类型检查
+# Type Checking
+# mypy>=1.5.0
+# types-PyYAML>=6.0.0

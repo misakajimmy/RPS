@@ -1,0 +1,41 @@
+# 硬件配置文件示例
+# Hardware Configuration Example
+
+# 机械臂配置（通过 GPIO 模拟 I2C 连接 uHand2.0）
+robot_arm:
+  type: "uhand2.0"  # 机械臂类型
+  i2c:
+    sda_pin: 23       # SDA 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    scl_pin: 24       # SCL 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    address: 0x40     # uHand2.0 I2C 从机地址（示例值，待确认）
+    freq_hz: 100000   # I2C 通讯频率（Hz）
+
+# 摄像头配置
+camera:
+  type: "usb_camera"  # 摄像头类型
+  device_id: 0  # 设备ID
+  width: 640  # 宽度
+  height: 480  # 高度
+  fps: 30  # 帧率
+
+# 语音模块配置（通过 GPIO 模拟 I2C 连接 CI1302）
+voice:
+  type: "ci1302"  # 语音模块类型
+  i2c:
+    sda_pin: 25       # SDA 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    scl_pin: 26       # SCL 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    address: 0x2b     # CI1302 I2C 从机地址（参考树莓派示例）
+    freq_hz: 100000   # I2C 通讯频率（Hz）
+
+# 游戏配置
+game:
+  round_timeout: 10.0  # 每轮超时时间（秒）
+  max_rounds: 5  # 最大回合数
+  gesture_recognition:
+    confidence_threshold: 0.7  # 识别置信度阈值
+    model_path: "models/hand_landmarker.task"  # MediaPipe Tasks 手势模型路径
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/rps.log"  # 日志文件路径

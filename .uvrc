@@ -1,0 +1,17 @@
+# uv 配置文件
+# uv Configuration File
+
+# 设置 Python 版本（可选，如果不设置则使用系统默认）
+# python-version = "3.11"
+
+# 设置虚拟环境目录（可选）
+# venv-location = ".venv"
+
+# 设置包索引（可选）
+# index-url = "https://pypi.org/simple"
+
+# 设置超时时间（秒）
+# timeout = 60
+
+# 启用并行安装
+# parallel = true

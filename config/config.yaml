@@ -1,0 +1,37 @@
+# 硬件配置文件示例
+# Hardware Configuration Example
+
+# 机械臂配置
+robot_arm:
+  type: "uhand2.0"  # 机械臂类型
+  port: "/dev/ttyUSB0"  # 串口路径
+  baudrate: 115200  # 波特率
+  timeout: 1.0  # 超时时间（秒）
+
+# 摄像头配置
+camera:
+  type: "usb_camera"  # 摄像头类型
+  device_id: 0  # 设备ID
+  width: 640  # 宽度
+  height: 480  # 高度
+  fps: 30  # 帧率
+
+# 语音模块配置
+voice:
+  type: "ci1302"  # 语音模块类型
+  port: "/dev/ttyUSB1"  # 串口路径
+  baudrate: 115200  # 波特率
+  timeout: 1.0  # 超时时间（秒）
+
+# 游戏配置
+game:
+  round_timeout: 10.0  # 每轮超时时间（秒）
+  max_rounds: 5  # 最大回合数
+  gesture_recognition:
+    confidence_threshold: 0.7  # 识别置信度阈值
+    model_path: "models/hand_landmarker.task"  # 手势识别模型路径
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/rps.log"  # 日志文件路径

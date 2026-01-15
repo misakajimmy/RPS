@@ -199,14 +199,21 @@ class Application:
             game_config = ConfigLoader.get_game_config(self.config)
             recognition_config = game_config.get('gesture_recognition', {})
             confidence_threshold = recognition_config.get('confidence_threshold', 0.7)
-            model_path = recognition_config.get('model_path', "models/hand_landmarker.task")
+            use_huggingface_model = recognition_config.get('use_huggingface_model', True)  # 默认使用 HuggingFace 模型
+            model_path = recognition_config.get('model_path', None)
+            model_size = recognition_config.get('model_size', 'n')
+            min_detection_confidence = recognition_config.get('min_detection_confidence', 0.5)
+            device = recognition_config.get('device', None)  # None 则自动检测
             
             self.gesture_recognizer = GestureRecognizer(
-                min_detection_confidence=0.5,
-                min_tracking_confidence=0.5,
-                max_num_hands=1,
+                min_detection_confidence=min_detection_confidence,
+                min_tracking_confidence=0.5,  # 保留兼容性
+                max_num_hands=1,  # 保留兼容性
                 confidence_threshold=confidence_threshold,
-                model_path=model_path
+                model_path=model_path,
+                model_size=model_size,
+                use_huggingface_model=use_huggingface_model,
+                device=device
             )
             
             logger.info("✓ 手势识别器初始化成功")

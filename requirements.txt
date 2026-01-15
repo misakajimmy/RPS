@@ -12,7 +12,10 @@ Pillow>=10.0.0
 
 # 机器学习/深度学习（用于手势识别）
 # Machine Learning / Deep Learning (for gesture recognition)
-mediapipe>=0.10.0  # Google的手势识别库
+ultralytics>=8.0.0  # YOLOv8 用于手势识别（支持 ARM64 Linux）
+# 以下两个包二选一安装即可（推荐 ultralyticsplus）
+# ultralyticsplus>=0.0.0  # 推荐：用于加载 HuggingFace 模型
+# huggingface_hub>=0.20.0  # 备选：用于下载 HuggingFace 模型
 
 # 串口通信（用于机械臂和语音模块）
 # Serial Communication (for robot arm and voice module)

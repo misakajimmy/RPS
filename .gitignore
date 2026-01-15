@@ -201,14 +201,19 @@ config/config.yaml  # 本地配置文件（包含敏感信息）
 *.hdf5
 *.pb
 *.onnx
-*.pt
+# 注意：.pt 文件已注释，允许提交小模型或示例模型
+# *.pt
 *.pth
 *.pkl
 *.pickle
 *.ckpt
 *.safetensors
-models/
+# models/ 目录已注释，允许提交模型目录结构
+# models/
 *.weights
+# 但忽略大型模型文件
+models/*.pt
+models/weights/*.pt
 
 # 数据文件
 # Data Files

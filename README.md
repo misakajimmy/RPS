@@ -50,8 +50,10 @@ RPS/
 ### 环境要求
 
 - Python 3.8 或更高版本
-- RK3588 ARM Linux 系统
+- RK3588 ARM Linux 系统（或其他支持的系统）q
 - 已连接的硬件设备（机械臂、摄像头、语音模块）
+
+**注意**：项目使用 **YOLOv8-Pose** 进行手势识别，支持 ARM64 Linux（RK3588）。详见 [YOLOv8 手势识别指南](docs/yolov8_gesture_recognition.md)。
 
 ### 安装步骤
 
@@ -79,8 +81,15 @@ cd RPS
 
 3. 使用 uv 创建虚拟环境并安装依赖
 ```bash
-# 创建虚拟环境并安装依赖
+# 创建虚拟环境并安装依赖（包括 YOLOv8）
 uv sync
+
+# 推荐：安装 HuggingFace 模型支持（用于更好的手势识别）
+uv sync --extra huggingface
+
+# 如果有 NVIDIA GPU，安装 CUDA 版本的 PyTorch（用于 GPU 加速）
+# 注意：需要手动安装，因为需要从 PyTorch 官方索引安装
+uv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
 
 # 或安装开发依赖
 uv sync --extra dev
@@ -88,6 +97,10 @@ uv sync --extra dev
 # 或安装所有可选依赖（包括串口通信等）
 uv sync --extra all
 ```
+
+**ARM64 用户注意**：YOLOv8 完全支持 ARM64 Linux。推荐使用 HuggingFace 手势识别模型，首次运行时会自动下载模型文件。
+
+**Windows/Linux GPU 用户注意**：如果您的系统有 NVIDIA GPU，需要安装支持 CUDA 的 PyTorch 版本才能使用 GPU 加速。默认安装的是 CPU 版本。请参考 [PyTorch CUDA 安装指南](docs/pytorch_cuda_setup.md) 安装 CUDA 版本的 PyTorch。
 
 4. 配置硬件参数
 ```bash

@@ -24,11 +24,31 @@ dependencies = [
     "opencv-python>=4.8.0",
     "numpy>=1.24.0",  # 使用默认上限，避免在Python 3.13下从源码构建旧版本
     "Pillow>=10.0.0",
-    "mediapipe>=0.10.0",  # MediaPipe（代码已适配新旧版本）
     "pyyaml>=6.0",
+    "ultralytics>=8.0.0",  # YOLOv8 用于手势识别（支持 ARM64）
 ]
 
 [project.optional-dependencies]
+# HuggingFace 模型支持（推荐，用于加载 HuggingFace 手势识别模型）
+huggingface = [
+    "ultralyticsplus>=0.0.0",  # 用于加载 HuggingFace 模型（推荐）
+    "huggingface_hub>=0.20.0",  # 用于下载 HuggingFace 模型（备选方案）
+    "opencv-python>=4.8.0",  # 确保使用 opencv-python 而不是 opencv-python-headless
+]
+
+# PyTorch CUDA 支持（用于 GPU 加速）
+# 注意：PyTorch CUDA 版本需要从 PyTorch 官方索引安装
+# 安装命令：uv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+# 或使用：uv sync --extra cuda --index-url https://download.pytorch.org/whl/cu121
+cuda = [
+    # 注意：这些包需要从 PyTorch 官方索引安装，不能直接从 PyPI 安装
+    # 使用以下命令安装：
+    # uv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+    # 或
+    # uv sync --extra cuda
+    # 然后手动安装：uv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio
+]
+
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -44,6 +64,7 @@ all = [
     "mypy>=1.5.0",
     "types-PyYAML>=6.0.0",
     "pyserial>=3.5",
+    "ultralyticsplus>=0.0.0",
 ]
 
 [project.scripts]
@@ -85,7 +106,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
     "cv2.*",
-    "mediapipe.*",
+    "ultralytics.*",
     "numpy.*",
 ]
 ignore_missing_imports = true

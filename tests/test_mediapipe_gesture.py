@@ -1,6 +1,6 @@
 """
-MediaPipe手势识别测试示例（带UI显示）
-MediaPipe Gesture Recognition Test Example with UI Display
+YOLOv8-Pose手势识别测试示例（带UI显示）
+YOLOv8-Pose Gesture Recognition Test Example with UI Display
 """
 import sys
 import cv2
@@ -43,7 +43,7 @@ class GestureTestUI:
         self.current_gesture = Gesture.UNKNOWN
         self.current_confidence = 0.0
         self.current_probabilities = {'rock': 0.0, 'paper': 0.0, 'scissors': 0.0}
-        self.last_results = None  # MediaPipe结果，用于绘制关键点
+        self.last_results = None  # YOLOv8结果，用于绘制关键点
         
     def calculate_fps(self):
         """计算FPS"""
@@ -202,13 +202,13 @@ class GestureTestUI:
         print()
         
         try:
-            # 初始化识别器（使用默认模型路径 models/hand_landmarker.task）
+            # 初始化识别器（使用默认 YOLOv8-Pose nano 模型，首次运行会自动下载）
             self.recognizer = GestureRecognizer(
                 min_detection_confidence=0.5,
                 min_tracking_confidence=0.5,
                 max_num_hands=1,
                 confidence_threshold=0.7,
-                model_path="models/hand_landmarker.task"
+                model_size='n'  # 使用 nano 模型（最小最快）
             )
             print("✓ 手势识别器创建成功")
             
@@ -362,7 +362,7 @@ class GestureTestUI:
 def test_gesture_recognizer():
     """测试手势识别器（命令行模式）"""
     print("=" * 50)
-    print("测试MediaPipe手势识别器")
+    print("测试YOLOv8-Pose手势识别器")
     print("=" * 50)
     
     # 创建识别器

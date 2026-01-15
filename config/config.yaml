@@ -1,12 +1,14 @@
 # 硬件配置文件示例
 # Hardware Configuration Example
 
-# 机械臂配置
+# 机械臂配置（通过 GPIO 模拟 I2C 连接 uHand2.0）
 robot_arm:
   type: "uhand2.0"  # 机械臂类型
-  port: "/dev/ttyUSB0"  # 串口路径
-  baudrate: 115200  # 波特率
-  timeout: 1.0  # 超时时间（秒）
+  i2c:
+    sda_pin: 23       # SDA 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    scl_pin: 24       # SCL 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    address: 0x40     # uHand2.0 I2C 从机地址（示例值，待确认）
+    freq_hz: 100000   # I2C 通讯频率（Hz）
 
 # 摄像头配置
 camera:
@@ -16,12 +18,14 @@ camera:
   height: 480  # 高度
   fps: 30  # 帧率
 
-# 语音模块配置
+# 语音模块配置（通过 GPIO 模拟 I2C 连接 CI1302）
 voice:
   type: "ci1302"  # 语音模块类型
-  port: "/dev/ttyUSB1"  # 串口路径
-  baudrate: 115200  # 波特率
-  timeout: 1.0  # 超时时间（秒）
+  i2c:
+    sda_pin: 25       # SDA 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    scl_pin: 26       # SCL 所在 GPIO 引脚（示例值，需根据实际硬件修改）
+    address: 0x2b     # CI1302 I2C 从机地址（参考树莓派示例）
+    freq_hz: 100000   # I2C 通讯频率（Hz）
 
 # 游戏配置
 game:
@@ -29,7 +33,15 @@ game:
   max_rounds: 5  # 最大回合数
   gesture_recognition:
     confidence_threshold: 0.7  # 识别置信度阈值
-    model_path: "models/hand_landmarker.task"  # 手势识别模型路径
+    # 模型配置
+    # 选项1: 使用 HuggingFace 手势识别模型（推荐，直接输出手势类别）
+    use_huggingface_model: true  # 是否使用 HuggingFace 手势识别模型
+    model_path: "models/best.pt"  # HuggingFace 模型ID，null 则使用默认
+    # 选项2: 使用 YOLOv8-Pose 模型（需要关键点检测）
+    # use_huggingface_model: false
+    # model_path: null  # YOLOv8-Pose 模型路径（.pt），null 则自动下载默认模型
+    # model_size: "n"  # 模型大小：'n'(nano), 's'(small), 'm'(medium), 'l'(large), 'x'(xlarge)
+    min_detection_confidence: 0.5  # 手势检测最小置信度
 
 # 日志配置
 logging:

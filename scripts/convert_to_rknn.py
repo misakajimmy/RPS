@@ -27,14 +27,23 @@ def load_module_from_file(module_name, file_path):
     """从文件路径加载模块"""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as e:
+        logger.error(f"加载模块 {module_name} 失败: {e}")
+        raise
     return module
 
 # 加载 export_onnx 模块
 export_onnx_path = Path(__file__).parent / "export_onnx.py"
 if export_onnx_path.exists():
-    export_onnx_module = load_module_from_file("export_onnx", str(export_onnx_path))
-    export_to_onnx = export_onnx_module.export_to_onnx
+    try:
+        export_onnx_module = load_module_from_file("export_onnx", str(export_onnx_path))
+        export_to_onnx = export_onnx_module.export_to_onnx
+    except Exception as e:
+        logger.error(f"无法加载 export_onnx 模块: {e}")
+        logger.error("请检查依赖是否正确安装（ultralytics, torch, torchvision）")
+        sys.exit(1)
 else:
     logger.error(f"无法找到 export_onnx.py: {export_onnx_path}")
     sys.exit(1)
@@ -42,8 +51,13 @@ else:
 # 加载 convert_rknn 模块
 convert_rknn_path = Path(__file__).parent / "convert_rknn.py"
 if convert_rknn_path.exists():
-    convert_rknn_module = load_module_from_file("convert_rknn", str(convert_rknn_path))
-    convert_onnx_to_rknn = convert_rknn_module.convert_onnx_to_rknn
+    try:
+        convert_rknn_module = load_module_from_file("convert_rknn", str(convert_rknn_path))
+        convert_onnx_to_rknn = convert_rknn_module.convert_onnx_to_rknn
+    except Exception as e:
+        logger.error(f"无法加载 convert_rknn 模块: {e}")
+        logger.error("请检查依赖是否正确安装（rknn-toolkit2）")
+        sys.exit(1)
 else:
     logger.error(f"无法找到 convert_rknn.py: {convert_rknn_path}")
     sys.exit(1)

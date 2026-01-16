@@ -20,8 +20,24 @@ logger = setup_logger("RPS.ExportONNX")
 try:
     from ultralytics import YOLO
     YOLO_AVAILABLE = True
-except ImportError:
-    logger.error("ultralytics 未安装，请运行: pip install ultralytics>=8.0.0")
+except ImportError as e:
+    logger.error(f"ultralytics 未安装: {e}")
+    logger.error("请运行: pip install ultralytics>=8.0.0")
+    sys.exit(1)
+except RuntimeError as e:
+    logger.error(f"导入 ultralytics 时发生运行时错误: {e}")
+    logger.error("这通常是由于 torch 和 torchvision 版本不兼容导致的")
+    logger.error("请尝试:")
+    logger.error("  1. 重新安装兼容的版本:")
+    logger.error("     pip install --upgrade torch torchvision")
+    logger.error("  2. 或者使用预编译的 wheel 文件")
+    logger.error("  3. 检查 PyTorch 官方文档以获取兼容版本信息")
+    sys.exit(1)
+except Exception as e:
+    logger.error(f"导入 ultralytics 时发生未知错误: {e}")
+    logger.error("请检查依赖是否正确安装")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 
 

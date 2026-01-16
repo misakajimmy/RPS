@@ -33,15 +33,24 @@ game:
   max_rounds: 5  # 最大回合数
   gesture_recognition:
     confidence_threshold: 0.7  # 识别置信度阈值
-    # 模型配置
-    # 选项1: 使用 HuggingFace 手势识别模型（推荐，直接输出手势类别）
-    use_huggingface_model: true  # 是否使用 HuggingFace 手势识别模型
-    model_path: "models/best.pt"  # HuggingFace 模型ID，null 则使用默认
-    # 选项2: 使用 YOLOv8-Pose 模型（需要关键点检测）
-    # use_huggingface_model: false
-    # model_path: null  # YOLOv8-Pose 模型路径（.pt），null 则自动下载默认模型
-    # model_size: "n"  # 模型大小：'n'(nano), 's'(small), 'm'(medium), 'l'(large), 'x'(xlarge)
     min_detection_confidence: 0.5  # 手势检测最小置信度
+    
+    # 识别器类型选择（通过 type 字段切换）
+    # 选项1: 使用 RKNN 识别器（RK3588 NPU 加速，推荐在 RK3588 上使用）
+    type: "rknn"  # 识别器类型: "yolo" 或 "rknn"
+    model_path: "models/best.rknn"  # RKNN 模型路径（.rknn 文件）
+    input_size: [640, 640]  # 模型输入尺寸 [width, height]（仅 RKNN）
+    
+    # 选项2: 使用 YOLO 识别器（CPU/GPU，推荐在 PC 上使用）
+    # type: "yolo"  # 识别器类型
+    # # 选项2.1: 使用 HuggingFace 手势识别模型（推荐，直接输出手势类别）
+    # use_huggingface_model: true  # 是否使用 HuggingFace 手势识别模型
+    # model_path: "lewiswatson/yolov8x-tuned-hand-gestures"  # HuggingFace 模型ID，null 则使用默认
+    # # 选项2.2: 使用 YOLOv8-Pose 模型（需要关键点检测）
+    # # use_huggingface_model: false
+    # # model_path: null  # YOLOv8-Pose 模型路径（.pt），null 则自动下载默认模型
+    # # model_size: "n"  # 模型大小：'n'(nano), 's'(small), 'm'(medium), 'l'(large), 'x'(xlarge)
+    # device: null  # 计算设备：null=自动检测, 'cuda'=GPU, 'cpu'=CPU, 'mps'=Apple Silicon
 
 # 日志配置
 logging:

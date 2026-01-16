@@ -9,6 +9,9 @@ Convert ONNX model to RKNN format for RK3588 NPU acceleration
 import sys
 import argparse
 import numpy as np
+import tempfile
+import shutil
+import cv2
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径
@@ -36,34 +39,53 @@ def create_calibration_dataset(dataset_path: str = None,
     创建量化校正数据集
     
     Args:
-        dataset_path: 数据集保存路径（如果为 None，则返回内存中的数据集）
+        dataset_path: 数据集保存路径（如果为 None，则创建临时目录）
         num_samples: 样本数量
         input_size: 输入图像尺寸 (width, height)
     
     Returns:
-        list: 校正数据集（numpy 数组列表）
+        str: 数据集文件夹路径（RKNN Toolkit 2 需要路径字符串）
     """
     logger.info(f"创建量化校正数据集: {num_samples} 个样本，尺寸 {input_size}")
     
-    # 生成随机图像数据（模拟真实输入）
-    # 注意：实际使用时，建议使用真实的验证集图像
-    dataset = []
-    for i in range(num_samples):
-        # 生成归一化后的图像数据 [0, 1]
-        # YOLOv8 通常使用 [0, 255] 范围的输入，但这里我们生成归一化数据
-        img = np.random.randint(0, 256, (input_size[1], input_size[0], 3), dtype=np.uint8)
-        # 转换为 NCHW 格式并归一化到 [0, 1]
-        img = img.transpose(2, 0, 1).astype(np.float32) / 255.0
-        dataset.append(img)
-    
-    if dataset_path:
+    # 确定数据集保存路径
+    if dataset_path is None:
+        # 创建临时目录
+        temp_dir = tempfile.mkdtemp(prefix='rknn_calib_')
+        dataset_path = temp_dir
+        logger.info(f"使用临时目录: {dataset_path}")
+    else:
         dataset_path = Path(dataset_path)
         dataset_path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"数据集保存到: {dataset_path}")
-        # 这里可以保存图像文件，但为了简化，我们只返回内存数据
+        dataset_path = str(dataset_path)
     
-    logger.info(f"✓ 创建了 {len(dataset)} 个校正样本")
-    return dataset
+    # 生成随机图像数据并保存为文件
+    # RKNN Toolkit 2 需要图像文件路径列表文件（.txt）
+    image_paths = []
+    for i in range(num_samples):
+        # 生成随机图像数据 [0, 255]
+        img = np.random.randint(0, 256, (input_size[1], input_size[0], 3), dtype=np.uint8)
+        # BGR 格式（OpenCV 默认）
+        img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR) if len(img.shape) == 3 else img
+        
+        # 保存为图像文件
+        img_path = Path(dataset_path) / f"calib_{i:04d}.jpg"
+        cv2.imwrite(str(img_path), img_bgr)
+        image_paths.append(img_path.resolve())
+    
+    # 创建数据集列表文件（.txt），每行一个图像路径
+    # RKNN Toolkit 2 需要文本文件路径，而不是目录或列表
+    dataset_txt_path = Path(dataset_path) / "dataset.txt"
+    with open(dataset_txt_path, 'w') as f:
+        for img_path in image_paths:
+            # 写入绝对路径
+            f.write(str(img_path) + '\n')
+    
+    logger.info(f"✓ 创建了 {num_samples} 个校正样本")
+    logger.info(f"✓ 数据集列表文件: {dataset_txt_path}")
+    
+    # 返回数据集列表文件路径（RKNN Toolkit 2 需要 .txt 文件路径）
+    return str(dataset_txt_path)
 
 
 def convert_onnx_to_rknn(onnx_model_path: str,
@@ -73,7 +95,7 @@ def convert_onnx_to_rknn(onnx_model_path: str,
                          mean_values: list = None,
                          std_values: list = None,
                          do_quantization: bool = True,
-                         quantization_dataset: list = None,
+                         quantization_dataset: str = None,  # 可以是目录路径、文本文件路径或图像路径列表
                          num_quantization_samples: int = 100,
                          output_dir: str = None):
     """
@@ -87,7 +109,7 @@ def convert_onnx_to_rknn(onnx_model_path: str,
         mean_values: 输入预处理中的均值（RGB 顺序），默认 [0, 0, 0]
         std_values: 输入预处理中的标准差（RGB 顺序），默认 [1, 1, 1]
         do_quantization: 是否执行 INT8 量化（推荐）
-        quantization_dataset: 量化校正数据集（如果为 None，则自动生成）
+        quantization_dataset: 量化校正数据集路径（字符串，如果为 None，则自动生成）
         num_quantization_samples: 量化校正样本数量
         output_dir: 输出目录（如果为 None，则使用 ONNX 文件所在目录）
     
@@ -152,19 +174,57 @@ def convert_onnx_to_rknn(onnx_model_path: str,
         logger.info("✓ ONNX 模型加载完成")
         
         # 准备量化数据集
-        dataset = quantization_dataset
-        if do_quantization and dataset is None:
+        # RKNN Toolkit 2 的 dataset 参数需要是包含图像路径的文本文件（.txt）
+        # 文本文件格式：每行一个图像文件的绝对路径
+        dataset_txt_path = quantization_dataset
+        if do_quantization and dataset_txt_path is None:
             logger.info("创建量化校正数据集...")
-            dataset = create_calibration_dataset(
+            dataset_txt_path = create_calibration_dataset(
                 num_samples=num_quantization_samples,
                 input_size=input_size
             )
+        elif do_quantization:
+            # 如果提供了数据集路径，需要确保是文本文件
+            dataset_path_obj = Path(dataset_txt_path)
+            if dataset_path_obj.is_dir():
+                # 如果是目录，创建数据集列表文件
+                logger.info(f"从目录创建数据集列表文件: {dataset_path_obj}")
+                image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
+                image_files = []
+                for ext in image_extensions:
+                    image_files.extend(list(dataset_path_obj.glob(f'*{ext}')))
+                    image_files.extend(list(dataset_path_obj.glob(f'*{ext.upper()}')))
+                
+                # 限制数量
+                image_files = image_files[:num_quantization_samples]
+                
+                # 创建数据集列表文件
+                dataset_txt_path = dataset_path_obj / "dataset.txt"
+                with open(dataset_txt_path, 'w') as f:
+                    for img_file in image_files:
+                        f.write(str(img_file.resolve()) + '\n')
+                dataset_txt_path = str(dataset_txt_path)
+                logger.info(f"创建数据集列表文件，包含 {len(image_files)} 个图像路径")
+            elif not dataset_path_obj.suffix == '.txt':
+                # 如果不是 .txt 文件，尝试创建列表文件
+                logger.warning(f"数据集路径不是 .txt 文件: {dataset_txt_path}")
+                logger.warning("尝试将其作为单个图像文件处理...")
+                # 创建临时列表文件
+                temp_txt = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                temp_txt.write(str(Path(dataset_txt_path).resolve()) + '\n')
+                temp_txt.close()
+                dataset_txt_path = temp_txt.name
+            else:
+                # 已经是 .txt 文件
+                dataset_txt_path = str(dataset_path_obj.resolve())
+                logger.info(f"使用数据集列表文件: {dataset_txt_path}")
         
         # 构建 RKNN 模型
         logger.info("构建 RKNN 模型...")
+        # RKNN Toolkit 2 的 dataset 参数应该是包含图像路径的文本文件（.txt）路径
         ret = rknn.build(
             do_quantization=do_quantization,
-            dataset=dataset if do_quantization else None
+            dataset=dataset_txt_path if do_quantization else None
         )
         if ret != 0:
             raise RuntimeError(f"构建 RKNN 模型失败，错误代码: {ret}")
@@ -185,6 +245,19 @@ def convert_onnx_to_rknn(onnx_model_path: str,
                 logger.info(f"SDK 版本: {sdk_version}")
         except:
             pass
+        
+        # 清理临时数据集目录（如果是临时创建的）
+        if do_quantization and dataset_txt_path:
+            try:
+                dataset_txt_path_obj = Path(dataset_txt_path)
+                dataset_dir = dataset_txt_path_obj.parent
+                # 检查是否是临时目录
+                temp_dir = tempfile.gettempdir()
+                if str(dataset_dir).startswith(temp_dir) or 'rknn_calib_' in str(dataset_dir):
+                    logger.info(f"清理临时数据集目录: {dataset_dir}")
+                    shutil.rmtree(dataset_dir, ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"清理临时目录失败: {e}")
         
         return str(rknn_model_path)
         

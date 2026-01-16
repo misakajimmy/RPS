@@ -191,30 +191,18 @@ class Application:
             return False
     
     def _initialize_gesture_recognizer(self) -> bool:
-        """初始化手势识别器"""
+        """初始化手势识别器（使用工厂模式）"""
         try:
             logger.info("初始化手势识别器...")
             
             # 从配置获取识别器参数
             game_config = ConfigLoader.get_game_config(self.config)
             recognition_config = game_config.get('gesture_recognition', {})
-            confidence_threshold = recognition_config.get('confidence_threshold', 0.7)
-            use_huggingface_model = recognition_config.get('use_huggingface_model', True)  # 默认使用 HuggingFace 模型
-            model_path = recognition_config.get('model_path', None)
-            model_size = recognition_config.get('model_size', 'n')
-            min_detection_confidence = recognition_config.get('min_detection_confidence', 0.5)
-            device = recognition_config.get('device', None)  # None 则自动检测
             
-            self.gesture_recognizer = GestureRecognizer(
-                min_detection_confidence=min_detection_confidence,
-                min_tracking_confidence=0.5,  # 保留兼容性
-                max_num_hands=1,  # 保留兼容性
-                confidence_threshold=confidence_threshold,
-                model_path=model_path,
-                model_size=model_size,
-                use_huggingface_model=use_huggingface_model,
-                device=device
-            )
+            # 使用工厂模式创建识别器
+            from .game.gesture_recognition import RecognizerFactory
+            
+            self.gesture_recognizer = RecognizerFactory.create_from_config(recognition_config)
             
             logger.info("✓ 手势识别器初始化成功")
             return True

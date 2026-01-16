@@ -6,7 +6,16 @@ import time
 from typing import Optional, Callable
 from .state_machine import GameState, GameStateMachine
 from .game_logic import GameManager, Gesture, GameResult
-from .gesture_recognition import GestureRecognizer, RecognitionResult, RecognitionResultProcessor
+from .gesture_recognition import (
+    GestureRecognizer, 
+    RecognitionResult, 
+    RecognitionResultProcessor
+)
+# 支持 RKNN 识别器（如果可用）
+try:
+    from .gesture_recognition import RKNNRecognizer
+except ImportError:
+    RKNNRecognizer = None
 from ..hardware.base.robot_arm_base import RobotArmBase, GestureType
 from ..hardware.base.camera_base import CameraBase
 from ..hardware.base.voice_base import VoiceBase
@@ -19,7 +28,7 @@ class GameController:
     """游戏控制器类，整合所有游戏组件"""
     
     def __init__(self, 
-                 gesture_recognizer: GestureRecognizer,
+                 gesture_recognizer,  # GestureRecognizer 或 RKNNRecognizer
                  robot_arm: Optional[RobotArmBase] = None,
                  camera: Optional[CameraBase] = None,
                  voice: Optional[VoiceBase] = None,
@@ -29,7 +38,7 @@ class GameController:
         初始化游戏控制器
         
         Args:
-            gesture_recognizer: 手势识别器
+            gesture_recognizer: 手势识别器（GestureRecognizer 或 RKNNRecognizer）
             robot_arm: 机械臂（可选）
             camera: 摄像头（可选）
             voice: 语音模块（可选）

@@ -104,6 +104,8 @@ uv sync --extra all
 
 **RK3588 用户注意**：如果要在 RK3588 上使用 NPU 加速，需要将模型转换为 RKNN 格式。请参考 [RKNN 模型转换指南](docs/rknn_conversion.md) 进行转换。
 
+**Windows 用户注意**：可以在 Windows 上安装 RKNN Toolkit 2 进行模型转换和模拟测试。`rknn-toolkit2` 不在 PyPI 上，需要从 Rockchip 官方获取。请参考 [RKNN Toolkit 2 安装指南](docs/rknn_installation.md) 和 [Windows 测试指南](docs/rknn_windows_testing.md)。
+
 4. 配置硬件参数
 ```bash
 # 复制配置文件示例

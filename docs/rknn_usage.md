@@ -17,7 +17,14 @@
 
 1. **RK3588 开发板**：需要支持 RKNN Runtime
 2. **RKNN 模型文件**：已转换好的 `.rknn` 模型文件
-3. **RKNN Runtime**：在 RK3588 系统上已安装 RKNN Runtime
+3. **rknn-toolkit-lite2**：在 RK3588 上安装运行时库
+   ```bash
+   pip install rknn-toolkit-lite2
+   # 或
+   pip install rknnlite
+   ```
+
+**重要**：在 RK3588 设备上运行时，代码会自动检测并使用 `rknnlite`（NPU 运行时），而不是 `rknn-toolkit2`（用于模型转换）。
 
 ## 配置使用
 
@@ -143,8 +150,23 @@ RKNN 识别器与 YOLO 识别器使用相同的接口：
 
 A: 检查：
 1. RKNN 模型文件是否存在且有效
-2. RKNN Runtime 是否正确安装
+2. 在 RK3588 上是否安装了 `rknn-toolkit-lite2`：
+   ```bash
+   pip install rknn-toolkit-lite2
+   ```
 3. 模型是否在正确的平台上转换（`--target-platform rk3588`）
+4. 查看日志输出，确认使用的是 `rknnlite` 还是 `rknn-toolkit2`
+
+### Q: 提示 "rknn-toolkit2 未安装" 但已经安装了
+
+A: 在 RK3588 设备上，应该安装 `rknn-toolkit-lite2`（运行时库），而不是 `rknn-toolkit2`（转换工具）：
+```bash
+# 在 RK3588 上
+pip install rknn-toolkit-lite2
+
+# 在开发机上（用于模型转换）
+# 从 Rockchip 官方获取 rknn-toolkit2
+```
 
 ### Q: 识别结果与 YOLO 不一致
 

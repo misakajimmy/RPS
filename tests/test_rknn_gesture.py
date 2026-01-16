@@ -197,13 +197,15 @@ class RKNNGestureTestUI:
         try:
             # 检查 RKNN 是否可用
             if not RKNN_AVAILABLE or RKNNRecognizer is None:
-                print("✗ rknn-toolkit2 未安装，无法使用 RKNN 识别器")
+                print("✗ RKNN 运行时未安装，无法使用 RKNN 识别器")
                 print("\n提示:")
-                print("1. 安装 RKNN Toolkit 2:")
-                print("   pip install rknn-toolkit2")
-                print("   或从 Rockchip 官方获取: https://github.com/rockchip-linux/rknn-toolkit2")
-                print("2. Windows 上可以使用模拟器模式进行测试（速度较慢）")
-                print("3. 实际 NPU 加速需要在 RK3588 设备上使用")
+                print("1. 在 RK3588 设备上安装 rknn-toolkit-lite2 (推荐):")
+                print("   pip install rknn-toolkit-lite2")
+                print("   或: pip install rknnlite")
+                print("2. 在开发机/Windows 上安装 rknn-toolkit2 (用于模型转换):")
+                print("   从 Rockchip 官方获取: https://github.com/rockchip-linux/rknn-toolkit2")
+                print("   Windows 上可以使用模拟器模式进行测试（速度较慢）")
+                print("3. 实际 NPU 加速需要在 RK3588 设备上使用 rknn-toolkit-lite2")
                 print("4. 如果只想测试识别功能，可以使用 YOLO 识别器:")
                 print("   python tests/test_mediapipe_gesture.py --ui")
                 return False

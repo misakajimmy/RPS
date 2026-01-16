@@ -11,14 +11,31 @@ from ..game_logic.gesture import Gesture
 
 logger = setup_logger("RPS.RKNNRecognizer")
 
-# 尝试导入 RKNN
+# 尝试导入 RKNN Lite（优先，用于 RK3588 运行时推理）
+RKNN_AVAILABLE = False
+RKNN_CLASS = None
+USE_RKNN_LITE = False
+
 try:
-    from rknn.api import RKNN
+    from rknnlite.api import RKNNLite
+    RKNN_CLASS = RKNNLite
     RKNN_AVAILABLE = True
+    USE_RKNN_LITE = True
+    logger.info("✓ 检测到 rknnlite (rknn-toolkit-lite2)，将使用 NPU 运行时")
 except ImportError:
-    RKNN_AVAILABLE = False
-    RKNN = None
-    logger.warning("rknn-toolkit2 未安装，RKNN 推理不可用")
+    # 如果 rknnlite 不可用，尝试 rknn-toolkit2（用于开发/转换）
+    try:
+        from rknn.api import RKNN
+        RKNN_CLASS = RKNN
+        RKNN_AVAILABLE = True
+        USE_RKNN_LITE = False
+        logger.info("✓ 检测到 rknn-toolkit2，将使用开发模式（可能使用模拟器）")
+    except ImportError:
+        RKNN_AVAILABLE = False
+        RKNN_CLASS = None
+        logger.warning("rknnlite 和 rknn-toolkit2 均未安装，RKNN 推理不可用")
+        logger.warning("在 RK3588 上请安装: pip install rknn-toolkit-lite2")
+        logger.warning("在开发机上请安装: rknn-toolkit2 (需从 Rockchip 官方获取)")
 
 
 class RKNNRecognizer:
@@ -51,9 +68,9 @@ class RKNNRecognizer:
         
         if not RKNN_AVAILABLE:
             raise ImportError(
-                "rknn-toolkit2 未安装，无法使用 RKNN 推理。\n"
-                "请安装: pip install rknn-toolkit2\n"
-                "注意：RKNN Toolkit 2 可能需要从 Rockchip 官方获取"
+                "RKNN 运行时未安装，无法使用 RKNN 推理。\n"
+                "在 RK3588 设备上请安装: pip install rknn-toolkit-lite2\n"
+                "在开发机上请安装: rknn-toolkit2 (需从 Rockchip 官方获取)"
             )
         
         self.model_path = Path(model_path)
@@ -84,32 +101,44 @@ class RKNNRecognizer:
             return True
         
         try:
-            self.rknn = RKNN(verbose=False)
+            # 创建 RKNN 对象
+            if USE_RKNN_LITE:
+                # rknnlite 不需要 verbose 参数
+                self.rknn = RKNN_CLASS()
+                logger.info("使用 rknnlite (NPU 运行时)")
+            else:
+                # rknn-toolkit2 支持 verbose 参数
+                self.rknn = RKNN_CLASS(verbose=False)
+                logger.info("使用 rknn-toolkit2 (开发模式)")
             
             # 加载 RKNN 模型
             logger.info("加载 RKNN 模型...")
             ret = self.rknn.load_rknn(str(self.model_path))
             if ret != 0:
                 raise RuntimeError(f"加载 RKNN 模型失败，错误代码: {ret}")
+            logger.info(f"✓ RKNN 模型加载成功: {self.model_path}")
             
             # 初始化运行时
-            # 在 Windows 上，如果没有指定 target 或无法连接到设备，会使用模拟器模式
             logger.info("初始化 RKNN 运行时...")
             
-            # 尝试初始化运行时
-            # 如果 target 为 None，RKNN Toolkit 2 会尝试自动检测
-            # 在 Windows 上，如果没有实际设备，会使用模拟器模式
+            # 确定目标平台
             if target is None:
-                # 自动检测：在 Windows 上会使用模拟器
-                ret = self.rknn.init_runtime()
+                # 自动检测：优先使用 rk3588
+                target = 'rk3588'
+            
+            # 初始化运行时
+            # rknnlite 和 rknn-toolkit2 的 init_runtime API 相同
+            if USE_RKNN_LITE:
+                # rknnlite 在 RK3588 上直接使用 NPU
+                ret = self.rknn.init_runtime(target=target)
             else:
-                # 指定目标平台
+                # rknn-toolkit2 可能使用模拟器模式
                 ret = self.rknn.init_runtime(target=target)
             
             if ret != 0:
-                # 如果初始化失败，尝试使用模拟器模式（仅用于测试）
+                # 如果初始化失败，尝试其他方式
                 import platform
-                if platform.system() == 'Windows':
+                if platform.system() == 'Windows' and not USE_RKNN_LITE:
                     logger.warning("无法连接到 RK3588 设备，尝试使用模拟器模式...")
                     logger.warning("注意：模拟器模式速度较慢，仅用于验证模型转换是否正确")
                     ret = self.rknn.init_runtime(target='rk3588', perf_debug=True)
@@ -123,13 +152,16 @@ class RKNNRecognizer:
             # 检测是否使用模拟器模式
             try:
                 # 尝试获取设备信息来判断是否使用模拟器
-                ret, sdk_version = self.rknn.get_sdk_version()
-                if ret == 0:
-                    logger.info(f"✓ RKNN 运行时初始化成功 (SDK: {sdk_version})")
+                if hasattr(self.rknn, 'get_sdk_version'):
+                    ret, sdk_version = self.rknn.get_sdk_version()
+                    if ret == 0:
+                        logger.info(f"✓ RKNN 运行时初始化成功 (SDK: {sdk_version})")
+                    else:
+                        logger.info("✓ RKNN 运行时初始化成功")
                 else:
-                    logger.info("✓ RKNN 运行时初始化成功（可能使用模拟器模式）")
+                    logger.info("✓ RKNN 运行时初始化成功")
             except:
-                logger.info("✓ RKNN 运行时初始化成功（可能使用模拟器模式）")
+                logger.info("✓ RKNN 运行时初始化成功")
             
             return True
             

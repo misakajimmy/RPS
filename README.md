@@ -102,6 +102,8 @@ uv sync --extra all
 
 **Windows/Linux GPU 用户注意**：如果您的系统有 NVIDIA GPU，需要安装支持 CUDA 的 PyTorch 版本才能使用 GPU 加速。默认安装的是 CPU 版本。请参考 [PyTorch CUDA 安装指南](docs/pytorch_cuda_setup.md) 安装 CUDA 版本的 PyTorch。
 
+**RK3588 用户注意**：如果要在 RK3588 上使用 NPU 加速，需要将模型转换为 RKNN 格式。请参考 [RKNN 模型转换指南](docs/rknn_conversion.md) 进行转换。
+
 4. 配置硬件参数
 ```bash
 # 复制配置文件示例

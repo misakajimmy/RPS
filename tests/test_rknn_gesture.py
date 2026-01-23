@@ -429,9 +429,18 @@ class RKNNGestureTestUI:
             
             if probabilities:
                 print("概率分布:")
-                for i, prob in enumerate(probabilities):
-                    gesture_name = Gesture(i).value if i < len(Gesture) else f"Class_{i}"
-                    print(f"  {gesture_name}: {prob:.4f}")
+                # probabilities 是一个字典，格式为 {'rock': float, 'paper': float, 'scissors': float}
+                if isinstance(probabilities, dict):
+                    for gesture_name, prob in probabilities.items():
+                        print(f"  {gesture_name.capitalize()}: {prob:.4f}")
+                elif isinstance(probabilities, (list, tuple, np.ndarray)):
+                    # 如果是列表/数组，尝试映射到手势名称
+                    gesture_names = ['rock', 'paper', 'scissors', 'unknown']
+                    for i, prob in enumerate(probabilities):
+                        if i < len(gesture_names):
+                            print(f"  {gesture_names[i].capitalize()}: {prob:.4f}")
+                        else:
+                            print(f"  Class_{i}: {prob:.4f}")
                 print()
             
             # 准备显示信息

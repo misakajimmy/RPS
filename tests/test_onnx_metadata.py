@@ -688,19 +688,27 @@ class ONNXMetadataTestUI:
     
     def test_onnx_live(self,
                       model_path: str = "models/best.onnx",
-                      device_id: int = 0):
+                      device_id: int = 0,
+                      image_path: Optional[str] = None):
         """
         实时测试 ONNX 模型
         
         Args:
             model_path: ONNX 模型文件路径
-            device_id: 摄像头设备ID
+            device_id: 摄像头设备ID（仅在 image_path 为 None 时使用）
+            image_path: 图片路径（如果提供，则使用图片推理而不是摄像头）
         """
         print("=" * 60)
-        print("ONNX 模型实时摄像头测试（完整元数据）")
+        if image_path:
+            print("ONNX 模型图片测试（完整元数据）")
+        else:
+            print("ONNX 模型实时摄像头测试（完整元数据）")
         print("=" * 60)
         print(f"模型路径: {model_path}")
-        print(f"摄像头设备: {device_id}")
+        if image_path:
+            print(f"图片路径: {image_path}")
+        else:
+            print(f"摄像头设备: {device_id}")
         print()
         
         # 检查 onnxruntime 是否可用
@@ -719,6 +727,11 @@ class ONNXMetadataTestUI:
             
             print("✓ ONNX 模型加载成功")
             
+            # 如果提供了图片路径，使用图片模式
+            if image_path:
+                return self._test_image(image_path)
+            
+            # 否则使用摄像头实时模式
             # 创建摄像头
             print("连接摄像头...")
             self.camera = USBCamera(device_id=device_id, width=640, height=480, fps=30)
@@ -883,6 +896,164 @@ class ONNXMetadataTestUI:
             if self.camera:
                 self.camera.disconnect()
             cv2.destroyAllWindows()
+    
+    def _test_image(self, image_path: str) -> bool:
+        """
+        使用图片进行推理测试
+        
+        Args:
+            image_path: 图片文件路径
+            
+        Returns:
+            bool: 测试是否成功
+        """
+        try:
+            # 检查图片文件是否存在
+            img_path = Path(image_path)
+            if not img_path.exists():
+                print(f"✗ 图片文件不存在: {img_path}")
+                return False
+            
+            print(f"加载图片: {img_path}")
+            
+            # 读取图片
+            frame = cv2.imread(str(img_path))
+            if frame is None:
+                print(f"✗ 无法读取图片: {img_path}")
+                return False
+            
+            print(f"✓ 图片加载成功: {frame.shape[1]}x{frame.shape[0]}")
+            print()
+            
+            # 获取原始图像尺寸
+            orig_h, orig_w = frame.shape[:2]
+            self.input_image_size = (orig_w, orig_h)
+            
+            # 预处理
+            preprocessed = self.preprocess_image(frame)
+            
+            # 获取模型输入尺寸（用于坐标转换）
+            if len(self.input_shape) == 4:
+                if self.input_shape[1] == 3:  # NCHW
+                    model_h, model_w = self.input_shape[2], self.input_shape[3]
+                else:  # NHWC
+                    model_h, model_w = self.input_shape[1], self.input_shape[2]
+            else:
+                model_w, model_h = 640, 640
+            
+            # 推理
+            print("进行推理...")
+            start_time = datetime.now()
+            outputs = self.session.run(self.output_names, {self.input_name: preprocessed})
+            inference_time = (datetime.now() - start_time).total_seconds() * 1000
+            
+            # 将输出转换为字典
+            outputs_dict = {name: output for name, output in zip(self.output_names, outputs)}
+            
+            # 检测结果
+            detections = []
+            
+            if outputs_dict:
+                self.inference_count += 1
+                
+                # 如果是检测模型，进行后处理
+                if self.is_detection_model:
+                    for output_name, output in outputs_dict.items():
+                        if len(output.shape) == 3 and output.shape[2] == 8400:
+                            detections = self.postprocess_detection_output(output, model_w, model_h)
+                            # 缩放检测框到原始图像尺寸
+                            scale_x = orig_w / model_w
+                            scale_y = orig_h / model_h
+                            for det in detections:
+                                box = det['box']
+                                det['box'] = [
+                                    int(box[0] * scale_x),
+                                    int(box[1] * scale_y),
+                                    int(box[2] * scale_x),
+                                    int(box[3] * scale_y)
+                                ]
+                            break
+                
+                # 解析输出元数据
+                metadata = self.parse_onnx_output(outputs_dict)
+                
+                # 如果是检测模型，添加检测结果到元数据
+                if self.is_detection_model and detections:
+                    metadata['detections'] = detections
+                    metadata['num_detections'] = len(detections)
+                
+                # 显示结果
+                print("\n" + "=" * 60)
+                print("推理结果:")
+                print("=" * 60)
+                print(f"推理时间: {inference_time:.2f} ms")
+                
+                # 显示输出信息
+                for output_name, output in outputs_dict.items():
+                    print(f"输出 '{output_name}': 形状 {output.shape}, 类型 {output.dtype}")
+                print()
+                
+                if self.is_detection_model:
+                    print(f"检测模型: 是")
+                    print(f"检测数量: {len(detections)}")
+                    if detections:
+                        best_det = max(detections, key=lambda x: x['confidence'])
+                        print(f"最佳检测:")
+                        print(f"  类别: {best_det['class_name']}")
+                        print(f"  置信度: {best_det['confidence']:.4f}")
+                        print(f"  边界框: {best_det['box']}")
+                    print()
+                else:
+                    print("检测模型: 否")
+                    print()
+                
+                # 输出统计信息
+                if 'output_min' in metadata:
+                    print("输出统计:")
+                    print(f"  最小值: {metadata['output_min']:.4f}")
+                    print(f"  最大值: {metadata['output_max']:.4f}")
+                    print(f"  平均值: {metadata['output_mean']:.4f}")
+                    print(f"  标准差: {metadata['output_std']:.4f}")
+                    print()
+                
+                # 准备显示信息
+                model_info = {
+                    'name': self.model_path.name if self.model_path else 'unknown'
+                }
+                
+                # 绘制检测框
+                if self.is_detection_model and self.show_detections and detections:
+                    frame = self.draw_detections(frame, detections)
+                
+                # 绘制元数据面板
+                if self.show_metadata:
+                    frame = self.draw_metadata_panel(frame, metadata, inference_time, model_info)
+                else:
+                    # 至少显示推理信息
+                    det_text = f" | Detections: {len(detections)}" if detections else ""
+                    cv2.putText(frame, f"Inference: {inference_time:.2f} ms{det_text}",
+                               (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # 创建窗口并显示
+                cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+                cv2.resizeWindow(self.window_name, 1280, 720)
+                
+                print("按任意键关闭窗口...")
+                cv2.imshow(self.window_name, frame)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                
+                print("\n✓ 测试完成")
+                return True
+            else:
+                print("✗ 模型没有输出")
+                return False
+            
+        except Exception as e:
+            print(f"✗ 图片测试异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 
 def main():
@@ -896,6 +1067,12 @@ def main():
   
   # 指定模型路径和摄像头设备
   python tests/test_onnx_metadata.py --model models/best.onnx --device-id 0
+  
+  # 使用图片进行推理
+  python tests/test_onnx_metadata.py --image path/to/image.jpg
+  
+  # 使用图片并指定模型
+  python tests/test_onnx_metadata.py --image path/to/image.jpg --model models/best.onnx
         """
     )
     parser.add_argument(
@@ -911,6 +1088,13 @@ def main():
         help='摄像头设备ID（默认: 0）'
     )
     
+    parser.add_argument(
+        '--image',
+        type=str,
+        default=None,
+        help='图片文件路径（如果提供，则使用图片推理而不是摄像头）'
+    )
+    
     args = parser.parse_args()
     
     # 检查模型文件
@@ -923,10 +1107,20 @@ def main():
         print("3. 可以使用 scripts/export_onnx.py 从 PyTorch 模型导出 ONNX")
         sys.exit(1)
     
+    # 检查图片文件（如果提供）
+    image_path = None
+    if args.image:
+        image_path_obj = Path(args.image)
+        if not image_path_obj.exists():
+            print(f"✗ 图片文件不存在: {image_path_obj}")
+            sys.exit(1)
+        image_path = str(image_path_obj)
+    
     ui = ONNXMetadataTestUI()
     success = ui.test_onnx_live(
         model_path=args.model,
-        device_id=args.device_id
+        device_id=args.device_id,
+        image_path=image_path
     )
     
     sys.exit(0 if success else 1)

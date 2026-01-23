@@ -184,7 +184,6 @@ config/config.yaml  # 本地配置文件（包含敏感信息）
 *.mkv
 *.flv
 *.wmv
-*.jpg
 *.jpeg
 *.png
 *.gif

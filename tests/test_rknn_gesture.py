@@ -183,16 +183,24 @@ class RKNNGestureTestUI:
                       model_path: str = "models/best.rknn",
                       device_id: int = 0,
                       input_size: tuple = (640, 640),
-                      confidence_threshold: float = 0.7):
-        """实时 RKNN 手势识别测试（带UI）"""
+                      confidence_threshold: float = 0.7,
+                      image_path: Optional[str] = None):
+        """
+        实时 RKNN 手势识别测试（带UI）
+        
+        Args:
+            model_path: RKNN 模型文件路径
+            device_id: 摄像头设备ID（仅在 image_path 为 None 时使用）
+            input_size: 模型输入尺寸
+            confidence_threshold: 置信度阈值
+            image_path: 图片路径（如果提供，则使用图片推理而不是摄像头）
+        """
         print("=" * 60)
-        print("RKNN 手势识别实时测试（带UI显示）")
+        if image_path:
+            print("RKNN 手势识别图片测试")
+        else:
+            print("RKNN 手势识别实时测试（带UI显示）")
         print("=" * 60)
-        print("按 'Q' 或 'ESC' 退出")
-        print("按 'S' 保存当前帧")
-        print("按 'R' 重置统计")
-        print("按 'I' 显示模型信息")
-        print()
         
         try:
             # 检查 RKNN 是否可用
@@ -224,6 +232,17 @@ class RKNNGestureTestUI:
                 return False
             
             print("✓ RKNN 识别器初始化成功")
+            
+            # 如果提供了图片路径，使用图片模式
+            if image_path:
+                return self._test_image(image_path, input_size, confidence_threshold)
+            
+            # 否则使用摄像头实时模式
+            print("按 'Q' 或 'ESC' 退出")
+            print("按 'S' 保存当前帧")
+            print("按 'R' 重置统计")
+            print("按 'I' 显示模型信息")
+            print()
             
             # 创建摄像头
             self.camera = USBCamera(device_id=device_id, width=640, height=480, fps=30)
@@ -362,6 +381,91 @@ class RKNNGestureTestUI:
             if self.recognizer:
                 self.recognizer.release()
             cv2.destroyAllWindows()
+    
+    def _test_image(self, image_path: str, input_size: tuple, confidence_threshold: float) -> bool:
+        """
+        使用图片进行推理测试
+        
+        Args:
+            image_path: 图片文件路径
+            input_size: 模型输入尺寸
+            confidence_threshold: 置信度阈值
+            
+        Returns:
+            bool: 测试是否成功
+        """
+        try:
+            # 检查图片文件是否存在
+            img_path = Path(image_path)
+            if not img_path.exists():
+                print(f"✗ 图片文件不存在: {img_path}")
+                return False
+            
+            print(f"加载图片: {img_path}")
+            
+            # 读取图片
+            frame = cv2.imread(str(img_path))
+            if frame is None:
+                print(f"✗ 无法读取图片: {img_path}")
+                return False
+            
+            print(f"✓ 图片加载成功: {frame.shape[1]}x{frame.shape[0]}")
+            print()
+            
+            # 识别手势
+            print("进行推理...")
+            start_time = datetime.now()
+            gesture, confidence, probabilities = self.recognizer.recognize(frame)
+            inference_time = (datetime.now() - start_time).total_seconds() * 1000  # 毫秒
+            
+            # 显示结果
+            print("\n" + "=" * 60)
+            print("推理结果:")
+            print("=" * 60)
+            print(f"手势: {gesture.value.upper()}")
+            print(f"置信度: {confidence:.4f}")
+            print(f"推理时间: {inference_time:.2f} ms")
+            print()
+            
+            if probabilities:
+                print("概率分布:")
+                for i, prob in enumerate(probabilities):
+                    gesture_name = Gesture(i).value if i < len(Gesture) else f"Class_{i}"
+                    print(f"  {gesture_name}: {prob:.4f}")
+                print()
+            
+            # 准备显示信息
+            info = {
+                "Mode": "Image Test",
+                "Image": img_path.name,
+                "Inference": f"{inference_time:.1f} ms",
+                "Gesture": gesture.value.upper(),
+                "Confidence": f"{confidence:.3f}",
+            }
+            
+            # 绘制信息面板
+            display_frame = self.draw_info_panel(frame, info)
+            
+            # 绘制手势标签
+            self.draw_gesture_label(display_frame, gesture, confidence)
+            
+            # 创建窗口并显示
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(self.window_name, 800, 600)
+            
+            print("按任意键关闭窗口...")
+            cv2.imshow(self.window_name, display_frame)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            
+            print("\n✓ 测试完成")
+            return True
+            
+        except Exception as e:
+            print(f"✗ 图片测试异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 
 def main():
@@ -380,6 +484,12 @@ def main():
   
   # 指定输入尺寸和置信度阈值
   python tests/test_rknn_gesture.py --input-size 640 640 --confidence 0.6
+  
+  # 使用图片进行推理
+  python tests/test_rknn_gesture.py --image path/to/image.jpg
+  
+  # 使用图片并指定模型和置信度阈值
+  python tests/test_rknn_gesture.py --image path/to/image.jpg --model models/best.rknn --confidence 0.6
         """
     )
     
@@ -413,6 +523,13 @@ def main():
         help='置信度阈值（默认: 0.7）'
     )
     
+    parser.add_argument(
+        '--image',
+        type=str,
+        default=None,
+        help='图片文件路径（如果提供，则使用图片推理而不是摄像头）'
+    )
+    
     args = parser.parse_args()
     
     # 检查模型文件是否存在
@@ -428,12 +545,22 @@ def main():
     # 创建测试UI
     ui = RKNNGestureTestUI()
     
+    # 检查图片文件（如果提供）
+    image_path = None
+    if args.image:
+        image_path_obj = Path(args.image)
+        if not image_path_obj.exists():
+            print(f"✗ 图片文件不存在: {image_path_obj}")
+            sys.exit(1)
+        image_path = str(image_path_obj)
+    
     # 运行测试
     success = ui.test_rknn_live(
         model_path=str(model_path),
         device_id=args.device,
         input_size=tuple(args.input_size),
-        confidence_threshold=args.confidence
+        confidence_threshold=args.confidence,
+        image_path=image_path
     )
     
     sys.exit(0 if success else 1)

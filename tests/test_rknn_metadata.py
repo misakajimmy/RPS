@@ -82,8 +82,8 @@ class RKNNMetadataTestUI:
         
         # 检测模型相关参数
         self.is_detection_model = False
-        self.detection_confidence_threshold = 0.25
-        self.nms_iou_threshold = 0.4
+        self.detection_confidence_threshold = 0.25  # 置信度阈值（与 ONNX 保持一致）
+        self.nms_iou_threshold = 0.45  # NMS 阈值
         self.class_names: List[str] = []
         
     def calculate_fps(self):
@@ -226,17 +226,104 @@ class RKNNMetadataTestUI:
         if len(output.shape) == 3:
             output = output[0]  # shape: (25, 8400)
         
-        # 提取坐标和类别分数
-        bbox_coords = output[0:4, :]  # shape: (4, 8400) - [cx, cy, w, h] (相对坐标)
-        class_logits = output[4:, :]  # shape: (21, 8400) - 类别分数
+        # 调试：检查输出数据的实际分布
+        print(f"\n[调试] 输出数据形状: {output.shape}")
+        print(f"[调试] 输出数据统计: min={output.min():.4f}, max={output.max():.4f}, mean={output.mean():.4f}")
         
-        # 应用 sigmoid 激活
-        bbox_coords_sigmoid = 1 / (1 + np.exp(-bbox_coords))
-        class_probs = 1 / (1 + np.exp(-class_logits))
+        # 检查每个通道的数据范围（前25个通道）
+        print(f"[调试] 各通道数据范围:")
+        for i in range(min(25, output.shape[0])):
+            channel_data = output[i, :]
+            non_zero_count = np.count_nonzero(channel_data)
+            print(f"  通道 {i:2d}: min={channel_data.min():8.4f}, max={channel_data.max():8.4f}, mean={channel_data.mean():8.4f}, 非零={non_zero_count}/8400")
+        
+        # 标准格式：前4个是坐标，后21个是类别
+        bbox_coords = output[0:4, :]  # shape: (4, 8400)
+        class_logits = output[4:, :]  # shape: (21, 8400)
+        
+        # 检查类别分数是否全为 0
+        if class_logits.min() == 0 and class_logits.max() == 0:
+            print(f"[警告] RKNN 模型类别分数全为 0！")
+            print(f"[警告] 这可能是因为：")
+            print(f"[警告]   1. RKNN 转换时量化导致类别分数被清零")
+            print(f"[警告]   2. RKNN 模型输出格式与 ONNX 不同")
+            print(f"[警告]   3. 需要检查模型转换配置")
+            print(f"[警告] 将使用坐标数据作为检测依据，类别信息可能不准确")
+            # 如果类别分数全为 0，我们无法获取类别信息
+            # 但可以尝试使用坐标数据来推断检测框
+            # 这种情况下，所有检测的类别都将是默认值（通常是第一个类别）
+        
+        logger.debug(f"坐标数据形状: {bbox_coords.shape}, 范围: [{bbox_coords.min():.4f}, {bbox_coords.max():.4f}]")
+        logger.debug(f"类别分数形状: {class_logits.shape}, 范围: [{class_logits.min():.4f}, {class_logits.max():.4f}]")
+        
+        # 调试：输出原始值范围
+        logger.debug(f"原始坐标范围: [{bbox_coords.min():.4f}, {bbox_coords.max():.4f}]")
+        logger.debug(f"原始类别分数范围: [{class_logits.min():.4f}, {class_logits.max():.4f}]")
+        
+        # 检查输出值范围，判断是否需要应用 sigmoid
+        # 如果值已经在 [0, 1] 范围内，可能已经应用了 sigmoid
+        coords_min, coords_max = bbox_coords.min(), bbox_coords.max()
+        logits_min, logits_max = class_logits.min(), class_logits.max()
+        
+        # 如果坐标值已经在 [0, 1] 范围内，说明已经应用了 sigmoid
+        if coords_min >= 0 and coords_max <= 1:
+            bbox_coords_sigmoid = bbox_coords
+            logger.debug("坐标值已在 [0,1] 范围内，跳过 sigmoid")
+        else:
+            # 应用 sigmoid 激活
+            bbox_coords_sigmoid = 1 / (1 + np.exp(-np.clip(bbox_coords, -500, 500)))
+            logger.debug("对坐标值应用 sigmoid")
+        
+        # 处理类别分数
+        if logits_min == 0 and logits_max == 0:
+            # 类别分数全为 0，这是 RKNN 转换的问题
+            # 我们无法获取真实的类别信息，但可以继续处理坐标数据
+            # 使用坐标数据的合理性来推断检测框
+            print(f"[处理] 类别分数全为 0，使用坐标数据推断检测框")
+            print(f"[处理] 注意：类别信息不可用，所有检测将标记为默认类别")
+            # 创建一个默认的类别分数矩阵
+            # 使用一个合理的默认置信度，基于坐标的合理性
+            default_confidence = 0.5  # 使用中等置信度
+            class_probs = np.full_like(class_logits, default_confidence / class_logits.shape[0])
+            # 设置第一个类别为默认置信度
+            class_probs[0, :] = default_confidence
+            logger.warning("类别分数全为 0，使用默认置信度和类别")
+        elif logits_min >= 0 and logits_max <= 1:
+            class_probs = class_logits
+            logger.debug("类别分数已在 [0,1] 范围内，跳过 sigmoid")
+        else:
+            # 应用 sigmoid 激活
+            class_probs = 1 / (1 + np.exp(-np.clip(class_logits, -500, 500)))
+            logger.debug("对类别分数应用 sigmoid")
+            logger.debug(f"Sigmoid 后类别分数范围: [{class_probs.min():.4f}, {class_probs.max():.4f}]")
         
         # 找到每个检测点的最高类别分数
         max_class_probs = np.max(class_probs, axis=0)  # shape: (8400,)
         class_ids = np.argmax(class_probs, axis=0)      # shape: (8400,)
+        
+        # 调试：输出置信度统计信息（仅在首次运行时）
+        if not hasattr(self, '_debug_printed'):
+            print(f"\n[调试] 原始类别分数范围: [{class_logits.min():.4f}, {class_logits.max():.4f}]")
+            print(f"[调试] 处理后类别分数范围: [{class_probs.min():.4f}, {class_probs.max():.4f}]")
+            print(f"[调试] 最大置信度范围: [{max_class_probs.min():.4f}, {max_class_probs.max():.4f}]")
+            print(f"[调试] 置信度阈值: {self.detection_confidence_threshold}")
+            # 统计超过阈值的检测点数量
+            above_threshold = np.sum(max_class_probs >= self.detection_confidence_threshold)
+            print(f"[调试] 超过阈值的检测点数量: {above_threshold} / 8400")
+            
+            # 如果类别分数全为 0，尝试检查输出格式
+            if class_logits.min() == 0 and class_logits.max() == 0:
+                print(f"[警告] 类别分数全为 0！")
+                print(f"[警告] 输出形状: {output.shape}")
+                print(f"[警告] 输出数据范围: [{output.min():.4f}, {output.max():.4f}]")
+                print(f"[警告] 坐标数据范围: [{bbox_coords.min():.4f}, {bbox_coords.max():.4f}]")
+                print(f"[警告] 可能的原因：RKNN 输出格式与 ONNX 不同，或数据提取方式有误")
+            
+            logger.info(f"类别分数范围: [{class_probs.min():.4f}, {class_probs.max():.4f}]")
+            logger.info(f"最大置信度范围: [{max_class_probs.min():.4f}, {max_class_probs.max():.4f}]")
+            logger.info(f"置信度阈值: {self.detection_confidence_threshold}")
+            logger.info(f"超过阈值的检测点数量: {above_threshold} / 8400")
+            self._debug_printed = True
         
         # YOLOv8 的特征图尺度（多尺度检测）
         # 8400 = 80*80 + 40*40 + 20*20 = 6400 + 1600 + 400
@@ -278,10 +365,17 @@ class RKNNMetadataTestUI:
             grid_x = grid_idx % grid_w
             
             # 转换为绝对坐标
+            # YOLOv8 的坐标格式：cx_rel 和 cy_rel 是相对于网格单元的偏移
+            # 需要先乘以 stride 得到在特征图上的坐标，然后映射回原图
             cx = (grid_x + cx_rel) * stride
             cy = (grid_y + cy_rel) * stride
+            # w 和 h 是相对于输入图像尺寸的比例
             w = w_rel * img_width
             h = h_rel * img_height
+            
+            # 确保坐标在合理范围内
+            if w <= 0 or h <= 0 or cx < 0 or cy < 0:
+                continue
             
             # 转换为 x1, y1, x2, y2
             x1 = max(0, int(cx - w / 2))
@@ -804,6 +898,188 @@ class RKNNMetadataTestUI:
             if self.camera:
                 self.camera.disconnect()
             cv2.destroyAllWindows()
+    
+    def _test_image(self, image_path: str, input_size: tuple) -> bool:
+        """
+        使用图片进行推理测试（仅命令行输出，不显示UI）
+        
+        Args:
+            image_path: 图片文件路径
+            input_size: 模型输入尺寸 (width, height)
+            
+        Returns:
+            bool: 测试是否成功
+        """
+        try:
+            # 检查图片文件是否存在
+            img_path = Path(image_path)
+            if not img_path.exists():
+                print(f"✗ 图片文件不存在: {img_path}")
+                return False
+            
+            print(f"加载图片: {img_path}")
+            
+            # 读取图片
+            frame = cv2.imread(str(img_path))
+            if frame is None:
+                print(f"✗ 无法读取图片: {img_path}")
+                return False
+            
+            print(f"✓ 图片加载成功: {frame.shape[1]}x{frame.shape[0]}")
+            print()
+            
+            # 获取原始图像尺寸
+            orig_h, orig_w = frame.shape[:2]
+            
+            # 预处理
+            preprocessed = self.preprocess_image(frame)
+            
+            # 推理
+            print("进行推理...")
+            start_time = datetime.now()
+            outputs = self.rknn.inference(inputs=[preprocessed])
+            inference_time = (datetime.now() - start_time).total_seconds() * 1000
+            
+            # 检测结果
+            detections = []
+            
+            if outputs:
+                self.inference_count += 1
+                output = outputs[0]
+                
+                # 首次运行时检测模型类型
+                if self.output_shape is None:
+                    if len(output.shape) == 3 and output.shape[2] == 8400:
+                        self.is_detection_model = True
+                        num_classes = output.shape[1] - 4
+                        logger.info(f"检测到 YOLOv8 检测模型: {num_classes} 个类别")
+                
+                # 如果是检测模型，进行后处理
+                if self.is_detection_model and len(output.shape) == 3 and output.shape[2] == 8400:
+                    detections = self.postprocess_detection_output(output, input_size[0], input_size[1])
+                    # 缩放检测框到原始图像尺寸
+                    scale_x = orig_w / input_size[0]
+                    scale_y = orig_h / input_size[1]
+                    for det in detections:
+                        box = det['box']
+                        det['box'] = [
+                            int(box[0] * scale_x),
+                            int(box[1] * scale_y),
+                            int(box[2] * scale_x),
+                            int(box[3] * scale_y)
+                        ]
+                
+                # 解析输出元数据
+                metadata = self.parse_rknn_output(output)
+                
+                # 如果是检测模型，添加检测结果到元数据
+                if self.is_detection_model and detections:
+                    metadata['detections'] = detections
+                    metadata['num_detections'] = len(detections)
+                
+                # 显示结果（仅命令行输出，不显示UI）
+                print("\n" + "=" * 60)
+                print("推理结果:")
+                print("=" * 60)
+                print(f"推理时间: {inference_time:.2f} ms")
+                print(f"输出形状: {output.shape}")
+                print(f"输出数据类型: {output.dtype}")
+                print(f"运行时: {'rknnlite' if USE_RKNN_LITE else 'rknn-toolkit2'}")
+                print()
+                
+                # 如果是检测模型，显示调试信息
+                if self.is_detection_model:
+                    # 提取并显示置信度统计
+                    bbox_coords = output[0, 0:4, :] if len(output.shape) == 3 else output[0:4, :]
+                    class_logits = output[0, 4:, :] if len(output.shape) == 3 else output[4:, :]
+                    
+                    # 检查是否需要应用 sigmoid
+                    coords_min, coords_max = bbox_coords.min(), bbox_coords.max()
+                    logits_min, logits_max = class_logits.min(), class_logits.max()
+                    
+                    if logits_min >= 0 and logits_max <= 1:
+                        class_probs = class_logits
+                        sigmoid_applied = "否（输出已在 [0,1] 范围内）"
+                    else:
+                        class_probs = 1 / (1 + np.exp(-np.clip(class_logits, -500, 500)))
+                        sigmoid_applied = "是"
+                    
+                    max_class_probs = np.max(class_probs, axis=0)
+                    
+                    print(f"检测模型: 是")
+                    print(f"坐标值范围: [{coords_min:.4f}, {coords_max:.4f}]")
+                    print(f"类别分数范围: [{logits_min:.4f}, {logits_max:.4f}]")
+                    print(f"应用 Sigmoid: {sigmoid_applied}")
+                    print(f"最大置信度范围: [{max_class_probs.min():.4f}, {max_class_probs.max():.4f}]")
+                    print(f"置信度阈值: {self.detection_confidence_threshold}")
+                    above_threshold = np.sum(max_class_probs >= self.detection_confidence_threshold)
+                    print(f"超过阈值的检测点: {above_threshold} / 8400")
+                    print(f"检测数量（NMS后）: {len(detections)}")
+                    print()
+                    
+                    # 检查类别分数是否可用
+                    class_logits_check = output[0, 4:, :] if len(output.shape) == 3 else output[4:, :]
+                    class_scores_available = not (class_logits_check.min() == 0 and class_logits_check.max() == 0)
+                    
+                    if not class_scores_available:
+                        print(f"⚠️  警告：类别分数不可用（RKNN 转换问题）")
+                        print(f"⚠️  所有检测的类别和置信度都是默认值，不准确")
+                        print(f"⚠️  建议：重新转换 RKNN 模型，检查转换配置或尝试不使用量化")
+                        print()
+                    
+                    if detections:
+                        # 显示所有检测结果
+                        print("\n检测结果:")
+                        for i, det in enumerate(detections, 1):
+                            if not class_scores_available:
+                                print(f"  [{i}] 类别: {det['class_name']} (⚠️ 默认值，不可靠), 置信度: {det['confidence']:.4f}, 边界框: {det['box']}")
+                            else:
+                                print(f"  [{i}] 类别: {det['class_name']}, 置信度: {det['confidence']:.4f}, 边界框: {det['box']}")
+                        # 显示最佳检测
+                        if detections:
+                            best_det = max(detections, key=lambda x: x['confidence'])
+                            print(f"\n最佳检测:")
+                            if not class_scores_available:
+                                print(f"  ⚠️  类别: {best_det['class_name']} (默认值，不可靠)")
+                            else:
+                                print(f"  类别: {best_det['class_name']}")
+                            print(f"  置信度: {best_det['confidence']:.4f}")
+                            print(f"  边界框: {best_det['box']}")
+                    else:
+                        print("  未检测到任何目标")
+                    print()
+                else:
+                    print("检测模型: 否")
+                    if metadata.get('type') == 'classification':
+                        print(f"分类结果:")
+                        print(f"  类别: {metadata.get('class_name', 'unknown')}")
+                        print(f"  置信度: {metadata.get('confidence', 0.0):.4f}")
+                        if 'probabilities' in metadata:
+                            print(f"  概率分布:")
+                            for cls_name, prob in metadata['probabilities'].items():
+                                print(f"    {cls_name}: {prob:.4f}")
+                    print()
+                
+                # 输出统计信息
+                if 'output_min' in metadata:
+                    print("输出统计:")
+                    print(f"  最小值: {metadata['output_min']:.4f}")
+                    print(f"  最大值: {metadata['output_max']:.4f}")
+                    print(f"  平均值: {metadata['output_mean']:.4f}")
+                    print(f"  标准差: {metadata['output_std']:.4f}")
+                    print()
+                
+                print("\n✓ 测试完成")
+                return True
+            else:
+                print("✗ 模型没有输出")
+                return False
+            
+        except Exception as e:
+            print(f"✗ 图片测试异常: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 
 def main():

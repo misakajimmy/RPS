@@ -597,20 +597,28 @@ class RKNNMetadataTestUI:
     def test_rknn_live(self,
                       model_path: str = "models/best.rknn",
                       device_id: int = 0,
-                      input_size: tuple = (640, 640)):
+                      input_size: tuple = (640, 640),
+                      image_path: Optional[str] = None):
         """
         实时测试 RKNN 模型
         
         Args:
             model_path: RKNN 模型文件路径
-            device_id: 摄像头设备ID
+            device_id: 摄像头设备ID（仅在 image_path 为 None 时使用）
             input_size: 模型输入尺寸 (width, height)
+            image_path: 图片路径（如果提供，则使用图片推理而不是摄像头）
         """
         print("=" * 60)
-        print("RKNN 模型实时摄像头测试（完整元数据）")
+        if image_path:
+            print("RKNN 模型图片测试（完整元数据）")
+        else:
+            print("RKNN 模型实时摄像头测试（完整元数据）")
         print("=" * 60)
         print(f"模型路径: {model_path}")
-        print(f"摄像头设备: {device_id}")
+        if image_path:
+            print(f"图片路径: {image_path}")
+        else:
+            print(f"摄像头设备: {device_id}")
         print(f"输入尺寸: {input_size[0]}x{input_size[1]}")
         print()
         
@@ -634,6 +642,11 @@ class RKNNMetadataTestUI:
             
             print("✓ RKNN 初始化成功")
             
+            # 如果提供了图片路径，使用图片模式
+            if image_path:
+                return self._test_image(image_path, input_size)
+            
+            # 否则使用摄像头实时模式
             # 创建摄像头
             print("连接摄像头...")
             self.camera = USBCamera(device_id=device_id, width=640, height=480, fps=30)
@@ -807,6 +820,12 @@ def main():
   
   # 指定输入尺寸
   python tests/test_rknn_metadata.py --input-size 640 640
+  
+  # 使用图片进行推理
+  python tests/test_rknn_metadata.py --image path/to/image.jpg
+  
+  # 使用图片并指定模型和输入尺寸
+  python tests/test_rknn_metadata.py --image path/to/image.jpg --model models/best.rknn --input-size 640 640
         """
     )
     parser.add_argument(
@@ -830,6 +849,13 @@ def main():
         help='模型输入尺寸（默认: 640 640）'
     )
     
+    parser.add_argument(
+        '--image',
+        type=str,
+        default=None,
+        help='图片文件路径（如果提供，则使用图片推理而不是摄像头）'
+    )
+    
     args = parser.parse_args()
     
     # 检查模型文件
@@ -842,11 +868,21 @@ def main():
         print("3. 或指定正确的模型路径: --model path/to/model.rknn")
         sys.exit(1)
     
+    # 检查图片文件（如果提供）
+    image_path = None
+    if args.image:
+        image_path_obj = Path(args.image)
+        if not image_path_obj.exists():
+            print(f"✗ 图片文件不存在: {image_path_obj}")
+            sys.exit(1)
+        image_path = str(image_path_obj)
+    
     ui = RKNNMetadataTestUI()
     success = ui.test_rknn_live(
         model_path=args.model,
         device_id=args.device_id,
-        input_size=tuple(args.input_size)
+        input_size=tuple(args.input_size),
+        image_path=image_path
     )
     
     sys.exit(0 if success else 1)
